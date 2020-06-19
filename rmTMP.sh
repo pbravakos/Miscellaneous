@@ -19,9 +19,9 @@ Ntasks=1
 MemPerCpu=100
 
 # Check for the existence of the produced files. If they already exist, exit the script. 
-[[ -f ${Output} ]] && echo "${Output} exists in `pwd`! Please delete, rename or move the file to proceed." >&2 && exit 1
-[[ -f ${AvailNodes} ]] && echo "${AvailNodes} exists in `pwd`! Please delete, rename or move the file to proceed." >&2 && exit 1
-[[ -f ${Output} ]] && echo "${Output} exists in `pwd`! Please delete, rename or move the file to proceed." >&2 && exit 1
+[[ -f ${Output} ]] && echo "${Output} exists in ${PWD}! Please delete, rename or move the file to proceed." >&2 && exit 1
+[[ -f ${AvailNodes} ]] && echo "${AvailNodes} exists in ${PWD}! Please delete, rename or move the file to proceed." >&2 && exit 1
+[[ -f ${Output} ]] && echo "${Output} exists in ${PWD}! Please delete, rename or move the file to proceed." >&2 && exit 1
 
 
 # Remove produced files upon exit.

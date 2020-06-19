@@ -10,27 +10,10 @@
 # Initial parameters
 EmptyTmp=EmptyUserTmp34.sh
 AvailNodes=PartNode78.txt
+SbatchOut=Deleteme82.txt
 
-# Remove produced files upon exit.
-#trap "rm -f $EmptyTmp $AvailNodes" EXIT
-
-# Create a new file to remove directories in /tmp on each node.
-#cat > ${EmptyTmp} <<EOF
-##!/bin/bash
-
-## find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} +
-#echo "SLURM partition = " "$SLURM_JOB_PARTITION"
-#echo "SLURM node list = " "$SLURM_JOB_NODELIST"
-#cd /tmp 
-#sleep 1 
-##if [[ "$USER" == $(ls -la | grep "$USER" | awk '{ print $3 }' | uniq) ]]
-##then
-##     rm -rf `ls -la | grep "$USER" | awk '{ print $9 }'`
-##fi
-
-#exit 0
-#EOF
-
+# Remove files upon exit.
+trap "rm -f $EmptyTmp $AvailNodes $SbatchOut" EXIT
 
 # We create a regex with all the nodes currently in use by the user. 
 # We want to prevent deleting the temp directories in these nodes, because user is currently running a job on them!
@@ -54,29 +37,24 @@ cat > ${EmptyTmp} <<EOF
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --mem-per-cpu=100
-# #SBATCH --output=
+#SBATCH --output=${SbatchOut}
 EOF
 
 cat >> ${EmptyTmp} <<"EOF"
 
-echo "SLURM partition = " "$SLURM_JOB_PARTITION"
-echo "SLURM node list = " "$SLURM_JOB_NODELIST"
-
-sleep 1
-echo panos
 find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} + &
 wait
-sleep 1
+
 exit 0
 EOF
-   echo $partition $node
-   sbatch ${EmptyTmp} 
+   sbatch ${EmptyTmp}
+   sleep 1
 done < $AvailNodes
 
 
 # Also empty temp in current node.
 find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} + 
-
+sleep 1
 
 exit 0
 

@@ -30,7 +30,7 @@ do
     while read -r node
     do
         sbatch --immediate --partition=${partition} --nodelist=${node} --output=${Output} ${EmptyTmp}     
-    done < <(sinfo --Node | awk -v part=$partition -v node=${UserNode} 'part==$3 && $1!=node && $4 ~ /mix|idle/ {print $1}')
+    done < <(sinfo --Node | awk -v part=$partition -v node=${UserNode} 'part==$3 && $1!~node && $4 ~ /mix|idle/ {print $1}')
 done < <(sinfo --Node | awk 'NR>1 && !a[$3]++ {print $3}' | sed 's/*$//g') 2> /dev/null
 
 

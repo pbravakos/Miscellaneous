@@ -9,11 +9,10 @@
 
 # Initial parameters
 EmptyTmp=EmptyUserTmp34.sh
-Output=RemoveMe94.txt
 AvailNodes=PartNode78.txt
 
 # Remove produced files upon exit.
-trap "rm -f $EmptyTmp $Output $AvailNodes" EXIT
+trap "rm -f $EmptyTmp $AvailNodes" EXIT
 
 # Create a new file to remove directories in /tmp on each node.
 cat > ${EmptyTmp} <<"EOF"
@@ -37,7 +36,7 @@ fi
 # Delete the user created dirs in /tmp by running an sbatch job on each available node.
 while read -r node partition
 do
-   sbatch --immediate --partition=${partition} --nodelist=${node} --output=${Output} --ntasks=1 --mem-per-cpu=50 ${EmptyTmp} 
+   sbatch --immediate --partition=${partition} --nodelist=${node} --output= --ntasks=1 --mem-per-cpu=50 ${EmptyTmp} 
 done < $AvailNodes
 
 
@@ -45,7 +44,7 @@ done < $AvailNodes
 bash ${EmptyTmp}
 
 
-sleep 1 # Needed, for trap to take effect!
+# sleep 1 # Needed, for trap to take effect!
 
 exit 0
 

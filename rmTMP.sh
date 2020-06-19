@@ -37,7 +37,6 @@ fi
 # Delete the user created dirs in /tmp in each available node.
 while read -r node partition
 do
-   echo $node $partition
    sbatch --immediate --partition=${partition} --nodelist=${node} --output=${Output} --ntasks=1 --mem-per-cpu=50  ${EmptyTmp} 
 done < $AvailNodes
 

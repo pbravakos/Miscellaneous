@@ -9,13 +9,13 @@
 
 # Initial parameters
 EmptyTmp=EmptyUserTmp34.sh
-Output1=RemoveMe94.txt
+Output=RemoveMe94.txt
 AvailNodes=PartNode78.txt
 
 # Remove produced files upon exit.
-trap "rm -f $EmptyTmp $Output1 $AvailNodes" EXIT
+trap "rm -f $EmptyTmp $Output $AvailNodes" EXIT
 
-# Create a new file to clean the temp directory on each node.
+# Create a new file to remove directories in /tmp on each node.
 cat > ${EmptyTmp} <<"EOF"
 #!/bin/bash
 find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} +
@@ -34,10 +34,10 @@ else
     sinfo --Node | awk -v node=${UserNode} '$1!~node && $4 ~ /mix|idle/ {print $1, $3}' 2> /dev/null | sed 's/*$//g' > $AvailNodes
 fi
 
-# Delete the user created dirs in /tmp in each available node.
+# Delete the user created dirs in /tmp by running an sbatch job on each available node.
 while read -r node partition
 do
-   sbatch --immediate --partition=${partition} --nodelist=${node} --output=${Output} --ntasks=1 --mem-per-cpu=50  ${EmptyTmp} 
+   sbatch --immediate --partition=${partition} --nodelist=${node} --output=${Output} --ntasks=1 --mem-per-cpu=50 ${EmptyTmp} 
 done < $AvailNodes
 
 

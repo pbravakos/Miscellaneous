@@ -12,13 +12,24 @@ EmptyTmp=EmptyUserTmp34.sh
 AvailNodes=PartNode78.txt
 
 # Remove produced files upon exit.
-trap "rm -f $EmptyTmp $AvailNodes" EXIT
+#trap "rm -f $EmptyTmp $AvailNodes" EXIT
 
 # Create a new file to remove directories in /tmp on each node.
-cat > ${EmptyTmp} <<"EOF"
-#!/bin/bash
-find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} +
-EOF
+#cat > ${EmptyTmp} <<EOF
+##!/bin/bash
+
+## find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} +
+#echo "SLURM partition = " "$SLURM_JOB_PARTITION"
+#echo "SLURM node list = " "$SLURM_JOB_NODELIST"
+#cd /tmp 
+#sleep 1 
+##if [[ "$USER" == $(ls -la | grep "$USER" | awk '{ print $3 }' | uniq) ]]
+##then
+##     rm -rf `ls -la | grep "$USER" | awk '{ print $9 }'`
+##fi
+
+#exit 0
+#EOF
 
 
 # We create a regex with all the nodes currently in use by the user. 
@@ -36,15 +47,36 @@ fi
 # Delete the user created dirs in /tmp by running an sbatch job on each available node.
 while read -r node partition
 do
-   sbatch --immediate --partition=${partition} --nodelist=${node} --output= --ntasks=1 --mem-per-cpu=50 ${EmptyTmp} 
+cat > ${EmptyTmp} <<EOF
+#!/bin/bash
+#SBATCH --partition=${partition}
+#SBATCH --nodelist=${node}
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --mem-per-cpu=100
+# #SBATCH --output=
+EOF
+
+cat >> ${EmptyTmp} <<"EOF"
+
+echo "SLURM partition = " "$SLURM_JOB_PARTITION"
+echo "SLURM node list = " "$SLURM_JOB_NODELIST"
+
+sleep 1
+echo panos
+find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} + &
+wait
+sleep 1
+exit 0
+EOF
+   echo $partition $node
+   sbatch ${EmptyTmp} 
 done < $AvailNodes
 
 
 # Also empty temp in current node.
-bash ${EmptyTmp}
+find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} + 
 
-
-# sleep 1 # Needed, for trap to take effect!
 
 exit 0
 

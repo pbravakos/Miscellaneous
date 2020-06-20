@@ -3,7 +3,7 @@
 # Removes user directories from /tmp for each available node not currently in use by $USER in SLURM scheduler.
 # ATTENTION!
 # It is possible that not all nodes will be accessible, and thus not all user /tmp directories will be removed. 
-# User is advised to run this script frequently at different time periods.
+# User is recommended to run this script frequently at different time periods.
 # To run it from login node:
 # bash rmTMP.sh
 
@@ -22,7 +22,7 @@ MemPerCpu=100
 [[ -f ${Output} ]] && echo "${Output} exists in ${PWD}. Please delete, rename or move the file to proceed." >&2 && exit 1
 
 # Remove produced files upon exit or interrupt.
-trap "sleep 1; rm -f $EmptyTmp $AvailNodes $Output; exit 1;" SIGINT
+trap "sleep 2; rm -f $EmptyTmp $AvailNodes $Output; exit 1;" SIGINT
 trap "rm -f $EmptyTmp $AvailNodes $Output" EXIT
 
 # Find all the nodes which do not have enough available memory.
@@ -40,14 +40,14 @@ if [[ -z ${UnavailNode} ]]
 then 
     sinfo --Node | awk '$4 ~ /mix|idle/ {print $1, $3}' | sed 's/*$//g' > $AvailNodes
 else 
-    sinfo --Node | awk -v node=${UnavailNode} '$1!~node && $4 ~ /mix|idle/ {print $1, $3}' 2> /dev/null | sed 's/*$//g' > $AvailNodes
+    sinfo --Node | awk -v node=${UnavailNode} '$1!=node && $4 ~ /mix|idle/ {print $1, $3}' 2> /dev/null | sed 's/*$//g' > $AvailNodes
     echo
-    echo "User directories in /tmp of ${UnavailNode//|/,} will NOT be deleted. Try again later when recources become available."
+    echo "User directories in /tmp of ${UnavailNode//|/,} will NOT be deleted."
     echo
 fi
 
 # If there are no available nodes, exit the script
-[[ -z ${AvailNodes} ]] && echo "There are no available nodes. No files were deleted. Please try again later." >&2 && exit 1
+[[ ! -s ${AvailNodes} ]] && echo "There are no available nodes. No files were deleted. Please try again later." >&2 && exit 1
 
 # Delete user's directories in /tmp by running an sbatch job on each available node.
 while read -r node partition
@@ -79,4 +79,14 @@ done < $AvailNodes
 find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} + 
 sleep 1
 
+<<EOF
+FINAL NOTE:
+This script takes some assumptions which have to hold true.
+1) All nodes (on all partitions) should have a distinct naming.
+2) Node names should have only one non alphanumeric character, the dash (-).
+3) Slurm version has to be 16.05.9 (It has not been tested for any other version)
+
+A change to any of the above assumptions could cause the script to collapse.
+
+EOF
 exit 0

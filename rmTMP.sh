@@ -1,10 +1,12 @@
 #!/bin/bash
 
 # Removes user directories from /tmp for each available node not currently in use by $USER in SLURM scheduler.
+
 # ATTENTION!
 # It is possible that not all nodes will be accessible, and thus not all user /tmp directories will be removed. 
-# User is recommended to run this script frequently at different time periods.
-# To run it from login node:
+# It is recommended to run this script frequently at different time periods.
+
+# Run the script from login node as follows:
 # bash rmTMP.sh
 
 # Initial parameters
@@ -17,9 +19,12 @@ Ntasks=1
 MemPerCpu=100
 
 # Check for the existence of the produced files in the working directory. If they already exist, exit the script. 
-[[ -f ${EmptyTmp} ]] && echo "${EmptyTmp} exists in ${PWD}. Please delete, rename or move the file to proceed." >&2 && exit 1
-[[ -f ${AvailNodes} ]] && echo "${AvailNodes} exists in ${PWD}. Please delete, rename or move the file to proceed." >&2 && exit 1
-[[ -f ${Output} ]] && echo "${Output} exists in ${PWD}. Please delete, rename or move the file to proceed." >&2 && exit 1
+[[ -f ${EmptyTmp} ]] && { echo "${EmptyTmp} exists in ${PWD}. Please delete, rename or move the file to proceed." >&2; exit 1; }
+[[ -f ${AvailNodes} ]] && { echo "${AvailNodes} exists in ${PWD}. Please delete, rename or move the file to proceed." >&2; exit 1; }
+[[ -f ${Output} ]] && { echo "${Output} exists in ${PWD}. Please delete, rename or move the file to proceed." >&2; exit 1; }
+
+# Check whether SLURM manager is installed on the system.
+command -v sinfo >/dev/null 2>&1 || { echo "SLURM is required to run this script, but is not currently installed. Please ask the administrator for help." >&2; exit 1; }
 
 # Remove produced files upon exit or interrupt.
 trap "sleep 2; rm -f $EmptyTmp $AvailNodes $Output; exit 1;" SIGINT
@@ -81,7 +86,7 @@ sleep 1
 
 <<EOF
 FINAL NOTE:
-This script takes some assumptions which have to hold true.
+This script relies on some assumptions which have to hold true.
 1) All nodes (on all partitions) should have a distinct naming.
 2) Node names should have only one non alphanumeric character, the dash (-).
 3) Slurm version has to be 16.05.9 (It has not been tested for any other version)

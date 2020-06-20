@@ -13,7 +13,6 @@ AvailNodes=PartNode78.txt
 
 # Parameters for sbatch
 Output=DeleteMe82.txt
-Nnodes=1
 Ntasks=1
 MemPerCpu=100
 
@@ -57,7 +56,6 @@ cat > ${EmptyTmp} <<EOF
 #!/bin/bash
 #SBATCH --partition=${partition}
 #SBATCH --nodelist=${node}
-# #SBATCH --nodes=${Nnodes}
 #SBATCH --ntasks=${Ntasks}
 #SBATCH --mem-per-cpu=${MemPerCpu}
 #SBATCH --output=${Output}

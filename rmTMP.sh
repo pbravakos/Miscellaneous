@@ -73,8 +73,13 @@ wait
 
 exit 0
 EOF
-   sbatch ${EmptyTmp}
-   echo "User directories in /tmp of ${partition} ${node} have been deleted"
+   sbatch ${EmptyTmp} 
+   if [ $? -eq 0 ]
+   then
+       echo "User directories in /tmp of ${partition} ${node} have been succesfully deleted."
+   else
+       echo "User directories in /tmp of ${partition} ${node} have NOT been deleted. Please try again later."
+   fi
    echo
    sleep 1
 done < $AvailNodes
@@ -87,11 +92,12 @@ sleep 1
 <<EOF
 FINAL NOTE:
 This script relies on some assumptions which have to hold true.
-1) All nodes (on all partitions) should have a distinct naming.
+1) Each node (from all partitions) should have a unique name.
 2) Node names should have only one non alphanumeric character, the dash (-).
 3) Slurm version has to be 16.05.9 (It has not been tested for any other version)
 
 A change to any of the above assumptions could cause the script to collapse.
 
 EOF
+
 exit 0

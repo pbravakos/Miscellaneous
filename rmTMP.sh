@@ -10,25 +10,29 @@
 # bash rmTMP.sh
 
 # Initial parameters
-EmptyTmp=EmptyUserTmp34.sh
-AvailNodes=PartNode78.txt
+EmptyTmp=EmptyUserTmp${RANDOM}.sh
+AvailNodes=PartNode${RANDOM}.txt
+JobsID=JobsID${RANDOM}.txt
 
 # Parameters for sbatch
-Output=DeleteMe82.txt
+Output=DeleteMe${RANDOM}.txt
 Ntasks=1
-MemPerCpu=100
+MemPerCpu=100 # memory requirement in MB.
+Time=10  # in minutes. Set a limit on the total run time of the job.
+JobName="RmUserTmp"
 
 # Check for the existence of the produced files in the working directory. If they already exist, exit the script. 
 [[ -f ${EmptyTmp} ]] && { echo "${EmptyTmp} exists in ${PWD}. Please delete, rename or move the file to proceed." >&2; exit 1; }
 [[ -f ${AvailNodes} ]] && { echo "${AvailNodes} exists in ${PWD}. Please delete, rename or move the file to proceed." >&2; exit 1; }
 [[ -f ${Output} ]] && { echo "${Output} exists in ${PWD}. Please delete, rename or move the file to proceed." >&2; exit 1; }
+[[ -f ${JobsID} ]] && { echo "${JobsID} exists in ${PWD}. Please delete, rename or move the file to proceed." >&2; exit 1; }
 
 # Check whether SLURM manager is installed on the system.
 command -v sinfo >/dev/null 2>&1 || { echo "SLURM is required to run this script, but is not currently installed. Please ask the administrator for help." >&2; exit 1; }
 
 # Remove produced files upon exit or interrupt.
-trap "sleep 2; rm -f $EmptyTmp $AvailNodes $Output; exit 1;" SIGINT
-trap "rm -f $EmptyTmp $AvailNodes $Output" EXIT
+trap "sleep 2; rm -f $EmptyTmp $AvailNodes $Output $JobsID; exit 1;" SIGINT
+trap "rm -f $EmptyTmp $AvailNodes $Output $JobsID" EXIT
 
 # Find all the nodes which do not have enough available memory.
 FullMemNode=$(sinfo -O NodeAddr,Partition,AllocMem,Memory | sed 's/ \+/ /g;s/*//g' | awk -v mem=${MemPerCpu} 'NR>1 && ($4-$3)<mem {print $1}')
@@ -62,18 +66,21 @@ cat > ${EmptyTmp} <<EOF
 #SBATCH --partition=${partition}
 #SBATCH --nodelist=${node}
 #SBATCH --ntasks=${Ntasks}
-#SBATCH --mem-per-cpu=${MemPerCpu}
+#SBATCH --mem=${MemPerCpu}M
 #SBATCH --output=${Output}
+#SBATCH --time=${Time}
+#SBATCH --job-name="${JobName}"
 EOF
 
 cat >> ${EmptyTmp} <<"EOF"
 
 find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} + &
 wait
-
+echo "$SLURM_JOBID" >> $JobsID
 exit 0
 EOF
-   sbatch ${EmptyTmp} 
+   sbatch ${EmptyTmp}
+   # For sbatch jobs, the exit code that is captured is the output of the batch script. 
    if [ $? -eq 0 ]
    then
        echo "User directories in /tmp of ${partition} ${node} have been succesfully deleted."
@@ -87,14 +94,25 @@ done < $AvailNodes
 
 # Delete user /tmp directories in current node.
 find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} + 
+
+# Cancel any remaining jobs.
+if [[ -s $JobsID ]]
+then
+    while -r jobID
+    do
+        scancel $jobID
+    done < $JobsID
+fi
+
 sleep 1
 
 <<EOF
 FINAL NOTE:
-This script relies on some assumptions which have to hold true.
+This script relies on some assumptions which were all true during testing.
 1) Each node (from all partitions) should have a unique name.
 2) Node names should have only one non alphanumeric character, the dash (-).
-3) Slurm version has to be 16.05.9 (It has not been tested for any other version)
+3) Slurm version should be 16.05.9.
+4) Backfill should be the scheduler type used.
 
 A change to any of the above assumptions could cause the script to collapse.
 

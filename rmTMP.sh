@@ -37,7 +37,7 @@ trap "rm -f $EmptyTmp $AvailNodes $Output" EXIT
 FullMemNode=$(sinfo -O NodeAddr,Partition,AllocMem,Memory | sed 's/ \+/ /g;s/*//g' | awk -v mem=${MemPerCpu} 'NR>1 && ($4-$3)<mem {print $1}')
 
 # Also, find all the nodes currently in use by the user. 
-UserNode=$(squeue | awk -v user="$USER" 'BEGIN {ORS = "|"} $4==user {print $8}' | sed 's/|/ /g')
+UserNode=$(squeue | awk -v user="$USER" '$4==user {print $8}')
 
 # Combine the two variables to a new one, containing all the unavailable nodes.
 # The goal is to prevent running a job on any of these nodes.

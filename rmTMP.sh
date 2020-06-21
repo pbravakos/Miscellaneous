@@ -10,11 +10,11 @@
 # bash rmTMP.sh
 
 # Initial parameters
-EmptyTmp=EmptyUserTmp${RANDOM}.sh
-AvailNodes=PartNode${RANDOM}.txt
+EmptyTmp=EmptyUserTmp.sh
+AvailNodes=PartNode.txt
 
 # Parameters for sbatch
-Output=DeleteMe${RANDOM}.txt
+Output=DeleteMe.txt
 Ntasks=1
 MemPerCpu=100 # memory requirement in MB.
 Time=10  # in minutes. Set a limit on the total run time of the job.

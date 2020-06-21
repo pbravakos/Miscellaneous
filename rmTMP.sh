@@ -12,27 +12,26 @@
 # Initial parameters
 EmptyTmp=EmptyUserTmp${RANDOM}.sh
 AvailNodes=PartNode${RANDOM}.txt
-JobsID=JobsID${RANDOM}.txt
 
 # Parameters for sbatch
 Output=DeleteMe${RANDOM}.txt
 Ntasks=1
 MemPerCpu=100 # memory requirement in MB.
 Time=10  # in minutes. Set a limit on the total run time of the job.
-JobName="RmUserTmp"
+JobName="RmUserTmp${RANDOM}${RANDOM}"
 
 # Check for the existence of the produced files in the working directory. If they already exist, exit the script. 
 [[ -f ${EmptyTmp} ]] && { echo "${EmptyTmp} exists in ${PWD}. Please delete, rename or move the file to proceed." >&2; exit 1; }
 [[ -f ${AvailNodes} ]] && { echo "${AvailNodes} exists in ${PWD}. Please delete, rename or move the file to proceed." >&2; exit 1; }
 [[ -f ${Output} ]] && { echo "${Output} exists in ${PWD}. Please delete, rename or move the file to proceed." >&2; exit 1; }
-[[ -f ${JobsID} ]] && { echo "${JobsID} exists in ${PWD}. Please delete, rename or move the file to proceed." >&2; exit 1; }
+
 
 # Check whether SLURM manager is installed on the system.
-command -v sinfo >/dev/null 2>&1 || { echo "SLURM is required to run this script, but is not currently installed. Please ask the administrator for help." >&2; exit 1; }
+command -v sinfo &>/dev/null || { echo "SLURM is required to run this script, but is not currently installed. Please ask the administrator for help." >&2; exit 1; }
 
 # Remove produced files upon exit or interrupt.
-trap "sleep 2; rm -f $EmptyTmp $AvailNodes $Output $JobsID; exit 1;" SIGINT
-trap "rm -f $EmptyTmp $AvailNodes $Output $JobsID" EXIT
+trap "sleep 2; rm -f $EmptyTmp $AvailNodes $Output; exit 1;" SIGINT
+trap "rm -f $EmptyTmp $AvailNodes $Output" EXIT
 
 # Find all the nodes which do not have enough available memory.
 FullMemNode=$(sinfo -O NodeAddr,Partition,AllocMem,Memory | sed 's/ \+/ /g;s/*//g' | awk -v mem=${MemPerCpu} 'NR>1 && ($4-$3)<mem {print $1}')
@@ -56,7 +55,7 @@ else
 fi
 
 # If there are no available nodes, exit the script
-[[ ! -s ${AvailNodes} ]] && echo "There are no available nodes. No files were deleted. Please try again later." >&2 && exit 1
+[[ ! -s ${AvailNodes} ]] && { echo "There are no available nodes. No files were deleted. Please try again later." >&2; exit 1; }
 
 # Delete user's directories in /tmp by running an sbatch job on each available node.
 while read -r node partition
@@ -76,7 +75,7 @@ cat >> ${EmptyTmp} <<"EOF"
 
 find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} + &
 wait
-echo "$SLURM_JOBID" >> $JobsID
+
 exit 0
 EOF
    sbatch ${EmptyTmp}
@@ -96,13 +95,7 @@ done < $AvailNodes
 find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} + 
 
 # Cancel any remaining jobs.
-if [[ -s $JobsID ]]
-then
-    while -r jobID
-    do
-        scancel $jobID
-    done < $JobsID
-fi
+scancel --jobname ${JobName}
 
 sleep 1
 

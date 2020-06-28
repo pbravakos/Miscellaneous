@@ -37,10 +37,10 @@ trap '$cleanup' EXIT HUP
 
 # Create a new variable with all the nodes which do not have enough available memory.
 FullMemNode=$(sinfo -O NodeAddr,Partition,AllocMem,Memory | sed 's/ \+/ /g;s/*//g' \
-| awk -v mem=${JobMem} 'NR>1 && ($4-$3)<mem {print $1}')
+| awk -v mem=${JobMem} 'NR>1 && ($4-$3)<mem {print "^"$1"$"}')
 
 # Also, create another variable with all the nodes currently in use by the user. 
-UserNode=$(squeue | awk -v user="$USER" '$4==user {print $8}')
+UserNode=$(squeue | awk -v user="$USER" '$4==user {print "^"$8"$"}')
 
 # Combine the two variables to a new one, containing all the unavailable nodes.
 # The goal is to prevent running a job on any of these nodes.
@@ -52,10 +52,9 @@ if [[ -z ${UnavailNode} ]]
 then 
     sinfo --Node | awk '$4 ~ /mix|idle/ {print $1, $3}' | sed 's/*$//g' > $AvailNodes
 else 
-    sinfo --Node | awk -v node=${UnavailNode} '$1!=node && $4 ~ /mix|idle/ {print $1, $3}' 2> /dev/null \
-    | sed 's/*$//g' > $AvailNodes
+    sinfo --Node | awk -v node=${UnavailNode} '$1!~node && $4 ~ /mix|idle/ {print $1, $3}' 2> /dev/null | sed 's/*$//g' > $AvailNodes
     echo
-    echo "User directories in /tmp of ${UnavailNode//|/,} will NOT be deleted."
+    echo "User directories in /tmp of ${UnavailNode//|/,} will NOT be deleted." | sed -E 's/\^|\$//g'
     echo
 fi
 

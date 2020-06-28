@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
 
+<<EOF
+
+NOTE:
+This script relies on some assumptions which were all true during testing.
+1) Each node (from all partitions) should have a unique name.
+2) Node names should have only one non alphanumeric character, the dash (-).
+3) Slurm version should be 16.05.9 and bash version 4.
+4) Backfill should be the scheduler type used.
+
+A change to any of the above assumptions could cause the script to collapse.
+
+EOF
+
+# Create a help function.
 show_help () {
     cat <<END
     
@@ -19,7 +33,7 @@ It is recommended to run this script frequently at different time periods.
 END
 }
 
-
+# Use getopts to create some options that users can set.
 # OPTIND Holds the index to the next argument to be processed.
 # It is initially set to 1, and needs to be re-set to 1 if we want to parse anything again with getopts.
 OPTIND=1 
@@ -72,16 +86,16 @@ do
            
         \?) 
             echo "Invalid option: -$OPTARG" >&2
-            echo "To check valid options try -h" >&2
-            echo "Script will run with set options" >&2
+            echo "To check valid options use -h" >&2
+            echo "Script will run with already set options" >&2
             echo >&2
            ;;
            
         :)
-      		echo "Option -$OPTARG requires an argument." >&2
-      		show_help >&2
-      		exit 1
-      		;;
+      	    echo "Option -$OPTARG requires an argument." >&2
+      	    show_help >&2
+      	    exit 1
+      	    ;;
       		
     esac
 done
@@ -125,17 +139,20 @@ UserNode=$(squeue | awk -v user="$USER" '$4==user {print "^"$8"$"}')
 UnavailNode=$(echo ${FullMemNode}" "${UserNode} | sed 's/ /\n/g' | sort -u \
 | tr "\n" "|" | sed 's/|$//g;s/^|//g')
 
-# Find all the available nodes and export them.
+# Find all the available nodes and export them to an array.
+# Each element of the array will have the name of the node and the name of the partition.
 if [[ -z ${UnavailNode} ]] 
 then 
-    AvailNodes=$(sinfo --Node | awk '$4 ~ /mix|idle/ {print $1, $3}' | sed 's/*$//g')
+    mapfile -t AvailNodes < <(sinfo --Node | awk '$4 ~ /mix|idle/ {print $1, $3}' | sed 's/*$//g')
 else 
-    AvailNodes=$(sinfo --Node | awk -v node=${UnavailNode} '$1!~node && $4 ~ /mix|idle/ {print $1, $3}' 2> /dev/null \
+    mapfile -t AvailNodes < <(sinfo --Node \
+    | awk -v node=${UnavailNode} '$1!~node && $4 ~ /mix|idle/ {print $1, $3}' 2> /dev/null \
     | sed 's/*$//g')
     echo
     echo "User directories in /tmp of ${UnavailNode//|/,} will NOT be deleted." | sed -E 's/\^|\$//g'
     echo
 fi
+
 
 # If there are no available nodes, exit the script
 [[ -z ${AvailNodes} ]] \
@@ -172,8 +189,7 @@ EOF
    fi
    echo
    sleep 1
-done < <(echo -e "${AvailNodes[0]}")
-
+done < <(for i in "${AvailNodes[@]}"; do echo $i; done)
 
 # Remove user /tmp directories in current node.
 find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} + 
@@ -183,16 +199,5 @@ scancel --jobname ${JobName}
 
 sleep 1
 
-<<EOF
-FINAL NOTE:
-This script relies on some assumptions which were all true during testing.
-1) Each node (from all partitions) should have a unique name.
-2) Node names should have only one non alphanumeric character, the dash (-).
-3) Slurm version should be 16.05.9 and bash version 4.
-4) Backfill should be the scheduler type used.
-
-A change to any of the above assumptions could cause the script to collapse.
-
-EOF
 
 exit 0

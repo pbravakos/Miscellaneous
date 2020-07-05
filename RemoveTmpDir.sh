@@ -6,16 +6,12 @@ IMPORTANT NOTE:
 
 This script relies on some assumptions which were all true during testing.
 1) Each node (from all partitions) should have a unique name.
-2) Bash should be version 4.
+2) Bash version should be 4.4.12.
 3) Slurm version should be 16.05.9.
 
 A change to any of the above assumptions could cause the script to collapse.
 
-Some recommendations:
-1) User names with 10 or more characters, should have a unique combination of their starting 10 characters.
-2) Backfill should be the scheduler type.
-
-Failure to meet the above recommendations does not break the code but, 
+Moreover, Backfill is recommended to be the scheduler type. Failure to meet this recommendation does not break the code but, 
 could cause the exclusion of some nodes from the removal of the /tmp dirs.
 
 EOF
@@ -116,32 +112,27 @@ JobOut=${JobOut:-RmUserTmp.out}
 Ntasks=1
 JobMem=${JobMem:-100} # memory requirement in MB.
 Time=${Time:-10} # in minutes. Set a limit on the total run time of the job.
-JobName="RmUserTmp${RANDOM}${RANDOM}"
+JobName="RmUserTmp"
 
 # Check whether SLURM manager is installed on the system.
 command -v sinfo &>/dev/null \
 || { echo "SLURM is required to run this script, but is not currently installed. Please ask the administrator for help." >&2; exit 1; }
 
 # Check for the existence of the produced files in the working directory. If they already exist, exit the script. 
-[[ -f ${EmptyTmp} ]] && { echo "${EmptyTmp} exists in ${PWD}. Please delete, rename or move the file." >&2; exit 1; }
-[[ -f ${JobOut} ]] && { echo "${JobOut} exists in ${PWD}. Please delete, rename or move the file." >&2; exit 1; }
+[[ -f ${EmptyTmp} ]] && { echo "${EmptyTmp} exists in ${PWD}. Please either rename the exiting file or set the -s option." >&2; exit 1; }
+[[ -f ${JobOut} ]] && { echo "${JobOut} exists in ${PWD}. Please either rename the existing file or set the -o option." >&2; exit 1; }
 
 # Remove produced files upon exit or any other interrupt.
 cleanup="rm -f $EmptyTmp $JobOut"
-trap 'echo; echo Terminating. Please wait; sleep 2; $cleanup;' ABRT INT QUIT
+trap 'echo; echo Terminating. Please wait; scancel --quiet ${AllJobIDs}; $cleanup; exit;' ABRT INT QUIT
 trap '$cleanup' EXIT HUP
 
 # Create a new variable with all the nodes which do not have enough available memory.
 FullMemNode=$(sinfo -O NodeAddr,Partition,AllocMem,Memory | sed 's/ \+/ /g;s/*//g' \
 | awk -v mem=${JobMem} 'NR>1 && ($4-$3)<mem {print "^"$1"$"}')
 
-# Also, create another variable with all the nodes currently in use by the user.
-NumChar=10 # Default squeue only displays 8 characters in user name. 
-# We assume that no two different user names should be exactly the same at $NumChar characters, 
-# since this is more characters than what most users 
-# regularly see on their screens with the default squeue command.
-[[ ${#USER} -gt $NumChar ]] && NumChar=${#USER} 
-UserNode=$(squeue -o "%.${NumChar}u %N" | awk -v user="$USER" '$1==user {print "^"$2"$"}')
+# Also, create another variable ($UserNode) with all the nodes currently in use by the user.
+UserNode=$(squeue -o "%.u %N" | awk -v user="$USER" '$1==user {print "^"$2"$"}')
 
 # Combine the two variables to a new one, containing all the unavailable nodes.
 # The goal is to prevent running a job on any of these nodes.
@@ -168,6 +159,7 @@ fi
 && { echo "There are no available nodes. No files were deleted. Please try again later." >&2; exit 1; }
 
 # Remove user's directories in /tmp by running an sbatch job on each available node.
+AllJobIDs=""
 while read -r node partition
 do
 cat > ${EmptyTmp} <<EOF
@@ -183,16 +175,16 @@ EOF
 
 cat >> ${EmptyTmp} <<"EOF"
 
+#find /tmp -maxdepth 1 -user "$USER" -exec sh -c "rm -fr {} || exit 1" \;
 find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} + &
-wait
-
-exit
+wait 
+exit 0
 EOF
-   sbatch ${EmptyTmp}
-   # For sbatch jobs, the exit code that is captured is the output of the batch script. 
-   if [ $? -eq 0 ]
-   then
-       echo "User directories in /tmp of ${partition} ${node} have been succesfully deleted."
+   NewJobID=$(sbatch ${EmptyTmp} 2> /dev/null)
+   if [[ $? -eq 0 ]]; then
+       NewJobID=$(echo ${NewJobID} | grep -Eo "[0-9]+$")
+       AllJobIDs=${AllJobIDs}${NewJobID}" "
+       echo "User directories in /tmp of ${partition} ${node} have been deleted."
    else
        echo "User directories in /tmp of ${partition} ${node} have NOT been deleted. Please try again later."
    fi
@@ -205,7 +197,6 @@ find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} +
 
 sleep 1
 # Cancel any remaining jobs.
-scancel --jobname ${JobName} &
-wait
+scancel --quiet ${AllJobIDs}
 
 exit 0

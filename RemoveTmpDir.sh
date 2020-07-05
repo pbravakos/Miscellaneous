@@ -5,7 +5,7 @@
 IMPORTANT NOTE:
 
 This script relies on some assumptions which were all true during testing.
-1) Each node (from all partitions) should have a unique name.
+1) Each node (on every partition) should have a unique name.
 2) Bash version should be 4.4.12.
 3) Slurm version should be 16.05.9.
 
@@ -139,7 +139,7 @@ trap '$cleanup' EXIT HUP
 FullMemNode=$(sinfo -O NodeAddr,Partition,AllocMem,Memory | sed 's/ \+/ /g;s/*//g' \
 | awk -v mem=${JobMem} 'NR>1 && ($4-$3)<mem {print "^"$1"$"}')
 
-# Also, create another variable ($UserNode) with all the nodes currently in use by the user.
+# Also, create another variable with all the nodes currently in use by the user.
 UserNode=$(squeue -o "%.u %N" | awk -v user="$USER" '$1==user {print "^"$2"$"}')
 
 # Combine the two variables to a new one, containing all the unavailable nodes.

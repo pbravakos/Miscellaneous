@@ -11,8 +11,13 @@ This script relies on some assumptions which were all true during testing.
 
 A change to any of the above assumptions could cause the script to collapse.
 
-Moreover, Backfill is recommended to be the scheduler type. Failure to meet this recommendation does not break the code but, 
-could cause the exclusion of some nodes from the removal of the /tmp dirs.
+NOTE:
+Backfill was set as the scheduler type during testing. 
+A change to the scheduler type does not break the code but, 
+could cause the exclusion of some nodes. 
+Moreover, Basic was set as the priority type during testing. 
+Change of the priority type to a more sofisticated one (i.e. multifactor) 
+could also potentially cause the exclusion of some or all the nodes.
 
 EOF
 
@@ -102,7 +107,10 @@ do
     esac
 done
 
-shift $(($OPTIND - 1))
+# If getopts exits with a return value greater than zero. OPTIND is set to the index of the first non-option argument
+# Shift command removes all the options that have been parsed by getopts from the parameters list, and so after that point, $1 will refer to the first non-option argument passed to the script. 
+# In our case do not make use of any of these arguments.
+shift "$(($OPTIND - 1))"
 
 # INITIAL PARAMETERS
 # SLURM bash script file 
@@ -119,8 +127,8 @@ command -v sinfo &>/dev/null \
 || { echo "SLURM is required to run this script, but is not currently installed. Please ask the administrator for help." >&2; exit 1; }
 
 # Check for the existence of the produced files in the working directory. If they already exist, exit the script. 
-[[ -f ${EmptyTmp} ]] && { echo "${EmptyTmp} exists in ${PWD}. Please either rename the exiting file or set the -s option." >&2; exit 1; }
-[[ -f ${JobOut} ]] && { echo "${JobOut} exists in ${PWD}. Please either rename the existing file or set the -o option." >&2; exit 1; }
+[[ -f ${EmptyTmp} ]] && { echo "${EmptyTmp} exists in ${PWD}. Please either rename the exiting file or set the -s option to a different file name." >&2; exit 1; }
+[[ -f ${JobOut} ]] && { echo "${JobOut} exists in ${PWD}. Please either rename the existing file or set the -o option to a different file name." >&2; exit 1; }
 
 # Remove produced files upon exit or any other interrupt.
 cleanup="rm -f $EmptyTmp $JobOut"

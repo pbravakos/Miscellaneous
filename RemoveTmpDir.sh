@@ -11,12 +11,12 @@ This script relies on some assumptions which were all true during testing.
 
 A change to any of the above assumptions could cause the script to collapse.
 
-NOTE:
+IMPORTANT:
 Backfill was set as the scheduler type during testing. 
 A change to the scheduler type does not break the code but, 
 could cause the exclusion of some nodes. 
 Moreover, Basic was set as the priority type during testing. 
-Change of the priority type to a more sofisticated one (i.e. multifactor) 
+Change of the priority type to a more sophisticated one (i.e. multifactor) 
 could also potentially cause the exclusion of some or all the nodes.
 
 EOF
@@ -25,13 +25,13 @@ EOF
 show_help () {
     cat <<END
     
-Usage: bash ${0##*/} [-h] [-m <integer>] [-t <integer>] [-o <string>] [-s <string>]
+Usage: bash ${0##*/} [-h] [-m <integer>] [-t <integer>] [-s <string>]
    	
-Removes user directories from /tmp for each available node not currently in use by $USER.
+Submit an sbatch job to each available compute node not currently in use by $USER, to remove user directories from /tmp.
+
  -h	Display this help and exit
  -m	Memory limit in MB for each sbatch job submitted to SLURM. Integer values should be between 10-1000. Default is 100.
  -t	Time limit in minutes for each sbatch job submitted to SLURM. Integer values should be between 1-100. Default is 10.
- -o	SLURM job output file name. Default is "RmUserTmp.out".This file is created in working directory and deleted automatically.
  -s	SLURM script file name. Default is "RmUserTmp.sh".This file is created in working directory and deleted automatically.
     
 ATTENTION!
@@ -48,7 +48,7 @@ OPTIND=1
 # getopts sets an exit status of FALSE when there's nothing left to parse.
 # It parses the positional parameters of the current shell or function by default (which means it parses "$@").
 # OPTARG is set to any argument for an option found by getopts.
-while getopts ':m:t:o:s:h' OPTION
+while getopts ':m:t:s:h' OPTION
 do
     case $OPTION in
     	m) 
@@ -74,13 +74,7 @@ do
     	       exit 1
     	   fi
            ;;
-           
-        o) 
-           JobOut="$OPTARG"
-           echo "SLURM output file name was set to be \"${JobOut}\""
-           echo
-           ;;
-           
+        
         s) 
            EmptyTmp="$OPTARG"
            echo "SLURM bash script file name was set to be \"${EmptyTmp}\""
@@ -116,7 +110,6 @@ shift "$(($OPTIND - 1))"
 # SLURM bash script file 
 EmptyTmp=${EmptyTmp:-RmUserTmp.sh}
 # Parameters for sbatch
-JobOut=${JobOut:-RmUserTmp.out}
 Ntasks=1
 JobMem=${JobMem:-100} # memory requirement in MB.
 Time=${Time:-10} # in minutes. Set a limit on the total run time of the job.
@@ -128,10 +121,10 @@ command -v sinfo &>/dev/null \
 
 # Check for the existence of the produced files in the working directory. If they already exist, exit the script. 
 [[ -f ${EmptyTmp} ]] && { echo "${EmptyTmp} exists in ${PWD}. Please either rename the exiting file or set the -s option to a different file name." >&2; exit 1; }
-[[ -f ${JobOut} ]] && { echo "${JobOut} exists in ${PWD}. Please either rename the existing file or set the -o option to a different file name." >&2; exit 1; }
+
 
 # Remove produced files upon exit or any other interrupt.
-cleanup="rm -f $EmptyTmp $JobOut"
+cleanup="rm -f $EmptyTmp"
 trap 'echo; echo Terminating. Please wait; scancel --quiet ${AllJobIDs}; $cleanup; exit;' ABRT INT QUIT
 trap '$cleanup' EXIT HUP
 
@@ -140,7 +133,7 @@ FullMemNode=$(sinfo -O NodeAddr,Partition,AllocMem,Memory | sed 's/ \+/ /g;s/*//
 | awk -v mem=${JobMem} 'NR>1 && ($4-$3)<mem {print "^"$1"$"}')
 
 # Also, create another variable with all the nodes currently in use by the user.
-UserNode=$(squeue -o "%.u %N" | awk -v user="$USER" '$1==user {print "^"$2"$"}')
+UserNode=$(squeue -o "%.u %N %.t" | awk -v user="$USER" '$1==user && $3~"^R$|^CG$" {print "^"$2"$"}')
 
 # Combine the two variables to a new one, containing all the unavailable nodes.
 # The goal is to prevent running a job on any of these nodes.
@@ -166,45 +159,42 @@ fi
 [[ -z ${AvailNodes} ]] \
 && { echo "There are no available nodes. No files were deleted. Please try again later." >&2; exit 1; }
 
-# Remove user's directories in /tmp by running an sbatch job on each available node.
-AllJobIDs=""
-while read -r node partition
-do
-cat > ${EmptyTmp} <<EOF
+
+cat > ${EmptyTmp} <<"EOF"
 #!/bin/bash
-#SBATCH --partition=${partition}
-#SBATCH --nodelist=${node}
-#SBATCH --ntasks=${Ntasks}
-#SBATCH --mem=${JobMem}M
-#SBATCH --output=${JobOut}
-#SBATCH --time=${Time}
-#SBATCH --job-name="${JobName}"
-EOF
-
-cat >> ${EmptyTmp} <<"EOF"
-
 #find /tmp -maxdepth 1 -user "$USER" -exec sh -c "rm -fr {} || exit 1" \;
 find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} + &
 wait 
 exit 0
 EOF
-   NewJobID=$(sbatch ${EmptyTmp} 2> /dev/null)
-   if [[ $? -eq 0 ]]; then
-       NewJobID=$(echo ${NewJobID} | grep -Eo "[0-9]+$")
-       AllJobIDs=${AllJobIDs}${NewJobID}" "
-       echo "User directories in /tmp of ${partition} ${node} have been deleted."
-   else
-       echo "User directories in /tmp of ${partition} ${node} have NOT been deleted. Please try again later."
-   fi
-   echo
-   sleep 1
+
+# Remove user's directories in /tmp by running an sbatch job on each available node.
+AllJobIDs=""
+while read -r node partition
+do
+    NewJobID=$(sbatch --partition="${partition}" --nodelist="${node}" --ntasks="${Ntasks}" --mem="${JobMem}M" --output=/dev/null --time="${Time}" --job-name="${JobName}" "${EmptyTmp}" 2> /dev/null)
+    if [[ $? -eq 0 ]]; then
+        NewJobID=$(echo ${NewJobID} | grep -Eo "[0-9]+$")
+        AllJobIDs=${AllJobIDs}${NewJobID}" "
+        echo "User directories in /tmp of ${partition} ${node} have been deleted."
+    else
+        echo "User directories in /tmp of ${partition} ${node} have NOT been deleted. Please try again later."
+    fi
+    echo
+    # sleep 1
 done < <(for i in "${AvailNodes[@]}"; do echo $i; done)
 
 # Remove user /tmp directories in current node.
 find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} + 
 
-sleep 1
-# Cancel any remaining jobs.
-scancel --quiet ${AllJobIDs}
+echo
+echo "Please wait"
+echo
+sleep 2
+
+JobsPattern=$(echo ${AllJobIDs// /|} | sed 's/|$//')
+AllJobIDs=$(squeue -o'%.i %.u %.t' | awk -v job="${JobsPattern}" 'BEGIN {ORS=" "} $2=="${USER}" && $3!="R" && $1~job {print $1}')
+# Cancel any remaining jobs, that are not currently running.
+scancel --quiet ${AllJobIDs} 2> /dev/null
 
 exit 0

@@ -11,13 +11,16 @@ This script relies on some assumptions which were all true during testing.
 
 A change to any of the above assumptions could cause the script to collapse.
 
-IMPORTANT:
-Backfill was set as the scheduler type during testing. 
+Also, Backfill was set as the scheduler type during testing. 
 A change to the scheduler type does not break the code but, 
 could cause the exclusion of some nodes. 
 Moreover, Basic was set as the priority type during testing. 
 Change of the priority type to a more sophisticated one (i.e. multifactor) 
 could also potentially cause the exclusion of some or all the nodes.
+
+Minor note:
+The --immediate sbatch directive was not functioning as expected during testing and decided not to use it.
+Had it been used, the script could have been slightly less complex (and milliseconds faster!).
 
 EOF
 
@@ -25,14 +28,14 @@ EOF
 show_help () {
     cat <<END
     
-Usage: bash ${0##*/} [-h] [-m <integer>] [-t <integer>] [-s <string>]
+Usage: bash ${0##*/} [-h] [-s <string>] [-m <integer>] [-t <integer>]
    	
 Submit an sbatch job to each available compute node not currently in use by $USER, to remove user directories from /tmp.
 
  -h	Display this help and exit
+ -s	SLURM script file name. Default is "RmUserTmp.sh".This file is created in the working directory and deleted automatically.
  -m	Memory limit in MB for each sbatch job submitted to SLURM. Integer values should be between 10-1000. Default is 100.
  -t	Time limit in minutes for each sbatch job submitted to SLURM. Integer values should be between 1-100. Default is 10.
- -s	SLURM script file name. Default is "RmUserTmp.sh".This file is created in working directory and deleted automatically.
     
 ATTENTION!
 It is possible that not all nodes will be accessible, and thus not all user /tmp directories will be removed. 
@@ -53,7 +56,7 @@ do
     case $OPTION in
     	m) 
     	   JobMem=$OPTARG
-    	   if [[ $JobMem =~ ^[0-9]+$ ]] && $JobMem -le 1000 && $JobMem -ge 10; then
+    	   if [[ $JobMem =~ ^[0-9]+$  && $JobMem -le 1000 && $JobMem -ge 10 ]]; then
     	       echo "SLURM Job Memory was set to ${JobMem}MB"
     	       echo
     	   else
@@ -65,7 +68,7 @@ do
            
         t) 
            Time="$OPTARG"
-           if [[ $Time =~ ^[0-9]+$ ]] && $Time -le 100 && $Time -ge 1 ]]; then
+           if [[ $Time =~ ^[0-9]+$  && $Time -le 100 && $Time -ge 1 ]]; then
     	       echo "SLURM Time Limit was set to ${Time}min"
     	       echo
     	   else
@@ -103,7 +106,7 @@ done
 
 # If getopts exits with a return value greater than zero. OPTIND is set to the index of the first non-option argument
 # Shift command removes all the options that have been parsed by getopts from the parameters list, and so after that point, $1 will refer to the first non-option argument passed to the script. 
-# In our case do not make use of any of these arguments.
+# In our case we ignore all these arguments.
 shift "$(($OPTIND - 1))"
 
 # INITIAL PARAMETERS
@@ -112,20 +115,19 @@ EmptyTmp=${EmptyTmp:-RmUserTmp.sh}
 # Parameters for sbatch
 Ntasks=1
 JobMem=${JobMem:-100} # memory requirement in MB.
-Time=${Time:-10} # in minutes. Set a limit on the total run time of the job.
+Time=${Time:-10} # in minutes. Set a limit on the total run time of each submitted job.
 JobName="RmUserTmp"
 
 # Check whether SLURM manager is installed on the system.
 command -v sinfo &>/dev/null \
 || { echo "SLURM is required to run this script, but is not currently installed. Please ask the administrator for help." >&2; exit 1; }
 
-# Check for the existence of the produced files in the working directory. If they already exist, exit the script. 
-[[ -f ${EmptyTmp} ]] && { echo "${EmptyTmp} exists in ${PWD}. Please either rename the exiting file or set the -s option to a different file name." >&2; exit 1; }
+# Check for the existence of any file with the same name as the produced bash script. If such a file exists, exit the script. 
+[[ -f ${EmptyTmp} ]] && { echo "${EmptyTmp} exists in ${PWD}. Please either rename the existing file or set the -s option to a different file name." >&2; exit 1; }
 
-
-# Remove produced files upon exit or any other interrupt.
+# Remove the produced bash script upon exit or any other interrupt.
 cleanup="rm -f $EmptyTmp"
-trap 'echo; echo Terminating. Please wait; scancel --quiet ${AllJobIDs}; $cleanup; exit;' ABRT INT QUIT
+trap 'echo; echo Terminating. Please wait; $cleanup; scancel --quiet ${AllJobIDs} 2>/dev/null; exit;' ABRT INT QUIT
 trap '$cleanup' EXIT HUP
 
 # Create a new variable with all the nodes which do not have enough available memory.
@@ -159,11 +161,11 @@ fi
 [[ -z ${AvailNodes} ]] \
 && { echo "There are no available nodes. No files were deleted. Please try again later." >&2; exit 1; }
 
-
+# Create the SLURM bash input file. 
 cat > ${EmptyTmp} <<"EOF"
 #!/bin/bash
 #find /tmp -maxdepth 1 -user "$USER" -exec sh -c "rm -fr {} || exit 1" \;
-find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} + &
+find /tmp -maxdepth 1 -mmin +1 -user "$USER" -exec rm -fr {} + &
 wait 
 exit 0
 EOF
@@ -172,7 +174,14 @@ EOF
 AllJobIDs=""
 while read -r node partition
 do
-    NewJobID=$(sbatch --partition="${partition}" --nodelist="${node}" --ntasks="${Ntasks}" --mem="${JobMem}M" --output=/dev/null --time="${Time}" --job-name="${JobName}" "${EmptyTmp}" 2> /dev/null)
+    NewJobID=$(sbatch --partition="${partition}" \
+                      --nodelist="${node}" \
+                      --ntasks="${Ntasks}" \
+                      --mem="${JobMem}M" \
+                      --output=/dev/null \
+                      --time="${Time}" \
+                      --job-name="${JobName}" \
+                      "${EmptyTmp}" 2> /dev/null)
     if [[ $? -eq 0 ]]; then
         NewJobID=$(echo ${NewJobID} | grep -Eo "[0-9]+$")
         AllJobIDs=${AllJobIDs}${NewJobID}" "
@@ -181,20 +190,19 @@ do
         echo "User directories in /tmp of ${partition} ${node} have NOT been deleted. Please try again later."
     fi
     echo
-    # sleep 1
 done < <(for i in "${AvailNodes[@]}"; do echo $i; done)
 
 # Remove user /tmp directories in current node.
-find /tmp -maxdepth 1 -user "$USER" -exec rm -fr {} + 
+find /tmp -maxdepth 1 -mmin +15 -user "$USER" -exec rm -fr {} + 
 
 echo
 echo "Please wait"
 echo
 sleep 2
 
+# Find all the jobs submitted by this script which do NOT currently have a runnning status and cancel those jobs.
 JobsPattern=$(echo ${AllJobIDs// /|} | sed 's/|$//')
 AllJobIDs=$(squeue -o'%.i %.u %.t' | awk -v job="${JobsPattern}" 'BEGIN {ORS=" "} $2=="${USER}" && $3!="R" && $1~job {print $1}')
-# Cancel any remaining jobs, that are not currently running.
 scancel --quiet ${AllJobIDs} 2> /dev/null
 
 exit 0

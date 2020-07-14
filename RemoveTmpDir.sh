@@ -27,15 +27,16 @@ EOF
 # Create a help function.
 show_help () {
     cat <<END
-    
-Usage: bash ${0##*/} [-h] [-s <string>] [-m <integer>] [-t <integer>]
-   	
-Submit an sbatch job to each available compute node not currently in use by $USER, to remove user directories from /tmp.
+     	
+Submits an sbatch job to each available compute node not currently in use by $USER, to remove user directories from /tmp. 
+Moreover, all directories created by $USER in /tmp of the current node ($HOSTNAME) are also removed.
 
- -h	Display this help and exit
- -s	SLURM script file name. Default is "RmUserTmp.sh".This file is created in the working directory and deleted automatically.
- -m	Memory limit in MB for each sbatch job submitted to SLURM. Integer values should be between 10-1000. Default is 100.
- -t	Time limit in minutes for each sbatch job submitted to SLURM. Integer values should be between 1-100. Default is 10.
+Usage: bash ${0##*/} [-h] [-s <string>] [-m <integer>] [-t <integer>]
+
+ -h     Display this help and exit
+ -s     SLURM script file name. Default is "RmUserTmp.sh".This file is created in the working directory and deleted automatically.
+ -m     Memory limit in MB for each sbatch job submitted to SLURM. Integer values should be between 10-1000. Default is 100.
+ -t     Time limit in minutes for each sbatch job submitted to SLURM. Integer values should be between 1-100. Default is 10.
     
 ATTENTION!
 It is possible that not all nodes will be accessible, and thus not all user /tmp directories will be removed. 

@@ -28,8 +28,8 @@ EOF
 show_help () {
     cat <<END
      	
-Submits an sbatch job to each available compute node not currently in use by $USER, to remove user directories from /tmp. 
-Moreover, all directories created by $USER in /tmp of the current node ($HOSTNAME) are also removed.
+Submits an sbatch job to each available compute node not currently in use by user $USER, to remove user directories from /tmp. 
+Moreover, all directories created by user $USER in /tmp of the current node ($HOSTNAME) are also removed.
 
 Usage: bash ${0##*/} [-h] [-s <string>] [-m <integer>] [-t <integer>]
 
@@ -52,12 +52,12 @@ OPTIND=1
 # getopts sets an exit status of FALSE when there's nothing left to parse.
 # It parses the positional parameters of the current shell or function by default (which means it parses "$@").
 # OPTARG is set to any argument for an option found by getopts.
-while getopts ':m:t:s:h' OPTION
+while getopts ':m:t:s:h' opt
 do
-    case $OPTION in
+    case "$opt" in
     	m) 
-    	   JobMem=$OPTARG
-    	   if [[ $JobMem =~ ^[0-9]+$  && $JobMem -le 1000 && $JobMem -ge 10 ]]; then
+    	   declare -i JobMem="$OPTARG" 2> /dev/null
+    	   if (( JobMem <= 1000 && JobMem >= 10 )); then
     	       echo "SLURM Job Memory was set to ${JobMem}MB"
     	       echo
     	   else
@@ -68,8 +68,8 @@ do
            ;;
            
         t) 
-           Time="$OPTARG"
-           if [[ $Time =~ ^[0-9]+$  && $Time -le 100 && $Time -ge 1 ]]; then
+           declare -i Time="$OPTARG" 2> /dev/null
+           if (( Time <= 100 && Time >= 1 )); then
     	       echo "SLURM Time Limit was set to ${Time}min"
     	       echo
     	   else
@@ -105,7 +105,7 @@ do
     esac
 done
 
-# If getopts exits with a return value greater than zero. OPTIND is set to the index of the first non-option argument
+# If getopts exits with a return value greater than zero, OPTIND is set to the index of the first non-option argument.
 # Shift command removes all the options that have been parsed by getopts from the parameters list, and so after that point, $1 will refer to the first non-option argument passed to the script. 
 # In our case we ignore all these arguments.
 shift "$(($OPTIND - 1))"
@@ -195,6 +195,7 @@ done < <(for i in "${AvailNodes[@]}"; do echo $i; done)
 
 # Remove user /tmp directories in current node.
 find /tmp -maxdepth 1 -mmin +15 -user "$USER" -exec rm -fr {} + 
+echo "User directories in /tmp of current node ${HOSTNAME} have been deleted."
 
 echo
 echo "Please wait"

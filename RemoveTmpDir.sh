@@ -34,7 +34,7 @@ Moreover, all directories created by user $USER in /tmp of the current node ($HO
 Usage: bash ${0##*/} [-h] [-s <string>] [-m <integer>] [-t <integer>]
 
  -h     Display this help and exit
- -s     SLURM script file name. Default is "RmUserTmp.sh".This file is created in the working directory and deleted automatically.
+ -s     SLURM script file name. Default is "RmUserTmp.XXXXXXXXX".This file is created in the working directory and deleted automatically.
  -m     Memory limit in MB for each sbatch job submitted to SLURM. Integer values should be between 10-1000. Default is 100.
  -t     Time limit in minutes for each sbatch job submitted to SLURM. Integer values should be between 1-100. Default is 10.
     
@@ -80,8 +80,8 @@ do
            ;;
         
         s) 
-           EmptyTmp="$OPTARG"
-           echo "SLURM bash script file name was set to be \"${EmptyTmp}\""
+           SlurmScript="$OPTARG"
+           echo "SLURM bash script file name was set to be \"${SlurmScript}\""
            echo
            ;;
            
@@ -108,26 +108,31 @@ done
 # If getopts exits with a return value greater than zero, OPTIND is set to the index of the first non-option argument.
 # Shift command removes all the options that have been parsed by getopts from the parameters list, and so after that point, $1 will refer to the first non-option argument passed to the script. 
 # In our case we ignore all these arguments.
-shift "$(($OPTIND - 1))"
+shift "$(( OPTIND - 1 ))"
 
 # INITIAL PARAMETERS
 # SLURM bash script file 
-EmptyTmp=${EmptyTmp:-RmUserTmp.sh}
+SlurmScript="${SlurmScript:-$(mktemp RmUserTmp.XXXXXXXXX)}"
 # Parameters for sbatch
 Ntasks=1
-JobMem=${JobMem:-100} # memory requirement in MB.
-Time=${Time:-10} # in minutes. Set a limit on the total run time of each submitted job.
+JobMem="${JobMem:-100}" # memory requirement in MB.
+Time="${Time:-10}" # in minutes. Set a limit on the total run time of each submitted job.
 JobName="RmUserTmp"
 
 # Check whether SLURM manager is installed on the system.
 command -v sinfo &>/dev/null \
 || { echo "SLURM is required to run this script, but is not currently installed. Please ask the administrator for help." >&2; exit 1; }
 
+# Check that we are using Bash version 4.
+(( BASH_VERSINFO[0] < 4 )) || { echo "This script can only run by bash 4 or higher." >&2; exit 1; }
+
 # Check for the existence of any file with the same name as the produced bash script. If such a file exists, exit the script. 
-[[ -f ${EmptyTmp} ]] && { echo "${EmptyTmp} exists in ${PWD}. Please either rename the existing file or set the -s option to a different file name." >&2; exit 1; }
+[[ -f ${SlurmScript} ]] && { echo "${SlurmScript} exists in ${PWD}. Please either rename the existing file or set the -s option to a different file name." >&2; exit 1; }
+
+[[ $(type ${SlurmScript}) ]] 2>/dev/null && { echo "There is a command named ${SlurmScript}. Please set the -s option to a different file name." >&2; exit 1; }
 
 # Remove the produced bash script upon exit or any other interrupt.
-cleanup="rm -f $EmptyTmp"
+cleanup="rm -f $SlurmScript"
 trap 'echo; echo Terminating. Please wait; $cleanup; scancel --quiet ${AllJobIDs} 2>/dev/null; exit;' ABRT INT QUIT
 trap '$cleanup' EXIT HUP
 
@@ -163,7 +168,7 @@ fi
 && { echo "There are no available nodes. No files were deleted. Please try again later." >&2; exit 1; }
 
 # Create the SLURM bash input file. 
-cat > ${EmptyTmp} <<"EOF"
+cat > "${SlurmScript}" <<"EOF"
 #!/bin/bash
 #find /tmp -maxdepth 1 -user "$USER" -exec sh -c "rm -fr {} || exit 1" \;
 find /tmp -maxdepth 1 -mmin +1 -user "$USER" -exec rm -fr {} + &
@@ -182,7 +187,7 @@ do
                       --output=/dev/null \
                       --time="${Time}" \
                       --job-name="${JobName}" \
-                      "${EmptyTmp}" 2> /dev/null)
+                      "${SlurmScript}" 2> /dev/null)
     if [[ $? -eq 0 ]]; then
         NewJobID=$(echo ${NewJobID} | grep -Eo "[0-9]+$")
         AllJobIDs=${AllJobIDs}${NewJobID}" "
